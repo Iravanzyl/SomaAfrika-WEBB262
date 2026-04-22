@@ -1,0 +1,191 @@
+﻿@page "/wanted"
+@using SomaAfrica.Models
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.EntityFrameworkCore
+@inject ApplicationDbContext Db
+@inject LanguageService Lang
+@inject AuthenticationStateProvider AuthStateProvider
+@rendermode InteractiveServer
+
+<PageTitle>@Lang.T("wanted_ads") - SomaShare</PageTitle>
+
+<div class="container-fluid px-3 px-md-4 py-3">
+
+    <!-- Page Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="fw-bold mb-0">🔍 @Lang.T("wanted_ads")</h2>
+        <AuthorizeView>
+            <Authorized>
+                <a href="/wanted/create" class="btn btn-success">
+                    ➕ @Lang.T("post_wanted_ad")
+                </a>
+            </Authorized>
+            <NotAuthorized>
+                <a href="/Account/Login" class="btn btn-outline-success">
+                    🔑 Login to Post
+                </a>
+            </NotAuthorized>
+        </AuthorizeView>
+    </div>
+
+    @if (ads == null)
+    {
+        <div class="text-center py-5">
+            <div class="spinner-border text-success"></div>
+            <p class="mt-2 text-muted">Loading wanted ads...</p>
+        </div>
+    }
+    else if (!ads.Any())
+    {
+        <div class="alert alert-info text-center">
+            <span class="fs-3">📭</span>
+            <p class="mb-0 mt-2">No wanted ads posted yet.</p>
+            <a href="/wanted/create" class="btn btn-success mt-3">
+                Be the first to post one
+            </a>
+        </div>
+    }
+    else
+    {
+        <!-- Action Message -->
+        @if (actionMsg != null)
+        {
+            <div class="alert alert-success alert-dismissible mb-3">
+                ✅ @actionMsg
+                <button type="button" class="btn-close"
+                        @onclick="() => actionMsg = null"></button>
+            </div>
+        }
+
+        <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-3">
+            @foreach (var ad in ads)
+            {
+                <div class="col">
+                    <div class="card h-100 shadow-sm border-start border-warning border-3">
+                        <div class="card-body">
+
+                            <h6 class="fw-bold mb-1">@ad.Title</h6>
+                            <p class="text-muted small mb-1">
+                                by @ad.Author
+                            </p>
+
+                            <div class="mb-2">
+                                <span class="badge bg-secondary">@ad.Subject</span>
+                                @if (!string.IsNullOrEmpty(ad.Campus))
+                                {
+                                    <span class="ms-2 text-muted small">
+                                        📍 @ad.Campus
+                                    </span>
+                                }
+                            </div>
+
+                            @if (ad.MaxPrice > 0)
+                            {
+                                <p class="mb-1">
+                                    Budget:
+                                    <strong class="text-success">
+                                        up to R @ad.MaxPrice.ToString("N0")
+                                    </strong>
+                                </p>
+                            }
+
+                            <small class="text-muted">
+                                Posted @ad.DatePosted.ToString("dd MMM yyyy")
+                            </small>
+
+                        </div>
+
+                        <!-- Show edit/delete only to the owner -->
+                        @if (ad.UserId == currentUserId)
+                        {
+                            <div class="card-footer bg-transparent d-flex gap-2">
+                                <a href="/wanted/edit/@ad.WantedAdId"
+                                       class="btn btn-sm btn-outline-secondary">
+                                    ✏️ Edit
+                                </a>
+                                <button class="btn btn-sm btn-outline-danger"
+                                        @onclick="() => ConfirmDelete(ad.WantedAdId)">
+                                    🗑️ Delete
+                                </button>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+<!-- Delete Confirmation Dialog -->
+@if (showDeleteConfirm)
+{
+    <div class="modal fade show d-block"
+         style="background:rgba(0,0,0,.5);" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">⚠️ Confirm Delete</h5>
+                </div>
+                <div class="modal-body">
+                    @Lang.T("delete_confirm")
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary"
+                            @onclick="() => showDeleteConfirm = false">
+                        @Lang.T("cancel")
+                    </button>
+                    <button class="btn btn-danger"
+                            @onclick="DeleteAd">
+                        @Lang.T("yes_delete")
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<WantedAd>? ads;
+    private string? currentUserId;
+    private string? actionMsg;
+    private bool showDeleteConfirm;
+    private int adToDeleteId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var auth = await AuthStateProvider.GetAuthenticationStateAsync();
+        currentUserId = auth.User.FindFirst(
+            System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+
+        await LoadAds();
+        Lang.OnLanguageChanged += async () => await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task LoadAds()
+    {
+        ads = await Db.WantedAds
+            .Include(w => w.User)
+            .Where(w => w.IsActive)
+            .OrderByDescending(w => w.DatePosted)
+            .ToListAsync();
+    }
+
+    private void ConfirmDelete(int id)
+    {
+        adToDeleteId = id;
+        showDeleteConfirm = true;
+    }
+
+    private async Task DeleteAd()
+    {
+        showDeleteConfirm = false;
+        var ad = await Db.WantedAds.FindAsync(adToDeleteId);
+        if (ad != null)
+        {
+            ad.IsActive = false;
+            await Db.SaveChangesAsync();
+            actionMsg = "Wanted ad removed successfully.";
+            await LoadAds();
+        }
+    }
+}

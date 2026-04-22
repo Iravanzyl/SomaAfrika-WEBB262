@@ -1,0 +1,531 @@
+﻿@page "/dashboard"
+@using SomaAfrica.Models
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.EntityFrameworkCore
+@attribute [Authorize]
+@inject DashboardService DashboardSvc
+@inject ApplicationDbContext Db
+@inject AuthenticationStateProvider AuthStateProvider
+@inject LanguageService Lang
+@inject NavigationManager Nav
+@rendermode InteractiveServer
+
+<PageTitle>@Lang.T("dashboard") - SomaAfrika</PageTitle>
+
+<div class="container-fluid px-3 px-md-4 py-3">
+
+    @if (isLoading)
+    {
+        <div class="text-center py-5">
+            <div class="spinner-border text-success"></div>
+            <p class="mt-2 text-muted">Loading your dashboard...</p>
+        </div>
+    }
+    else if (summary != null)
+    {
+        <!-- Trust Score Header -->
+        <div class="row g-3 mb-4">
+            <div class="col-12">
+                <div class="card border-0 bg-success text-white shadow">
+                    <div class="card-body d-flex flex-column flex-md-row
+                        justify-content-between align-items-start
+                        align-items-md-center gap-3">
+                        <div>
+                            <h3 class="fw-bold mb-1">@Lang.T("dashboard")</h3>
+                            <small>@userName</small>
+                        </div>
+                        <div class="text-center text-md-end">
+                            <div class="fs-2 fw-bold">
+                                @(summary.TrustScore > 0
+                                    ? summary.TrustScore.ToString("N1")
+                                    : "—")
+                                <span class="fs-5">/ 5.0</span>
+                            </div>
+                            <div class="small">⭐ @Lang.T("trust_score")</div>
+                            <div class="small">
+                                @summary.CompletedTransactions
+                                @Lang.T("completed_transactions")
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Summary Count Cards -->
+            <div class="col-6 col-md-3">
+                <div class="card text-center shadow-sm">
+                    <div class="card-body">
+                        <div class="fs-3 fw-bold text-success">
+                            @summary.MyListings.Count
+                        </div>
+                        <small class="text-muted">@Lang.T("my_listings")</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="card text-center shadow-sm">
+                    <div class="card-body">
+                        <div class="fs-3 fw-bold text-primary">
+                            @summary.MyOffers.Count
+                        </div>
+                        <small class="text-muted">@Lang.T("my_offers")</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="card text-center shadow-sm">
+                    <div class="card-body">
+                        <div class="fs-3 fw-bold text-warning">
+                            @summary.MyTransactions.Count
+                        </div>
+                        <small class="text-muted">@Lang.T("my_transactions")</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="card text-center shadow-sm">
+                    <div class="card-body">
+                        <div class="fs-3 fw-bold text-info">
+                            @summary.MyReviews.Count
+                        </div>
+                        <small class="text-muted">@Lang.T("my_reviews")</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Action Message -->
+        @if (actionMsg != null)
+        {
+            <div class="alert alert-success alert-dismissible mb-3">
+                ✅ @actionMsg
+                <button type="button" class="btn-close"
+                        @onclick="() => actionMsg = null"></button>
+            </div>
+        }
+
+        <!-- Tab Navigation -->
+        <ul class="nav nav-tabs mb-4 flex-nowrap overflow-auto">
+            <li class="nav-item">
+                <button class="nav-link @(activeTab == "listings" ? "active" : "")"
+                        @onclick='() => activeTab = "listings"'>
+                    📚 @Lang.T("my_listings")
+                </button>
+            </li>
+            <li class="nav-item">
+                <button class="nav-link @(activeTab == "offers" ? "active" : "")"
+                        @onclick='() => activeTab = "offers"'>
+                    🤝 @Lang.T("my_offers")
+                </button>
+            </li>
+            <li class="nav-item">
+                <button class="nav-link @(activeTab == "transactions" ? "active" : "")"
+                        @onclick='() => activeTab = "transactions"'>
+                    💳 @Lang.T("my_transactions")
+                </button>
+            </li>
+            <li class="nav-item">
+                <button class="nav-link @(activeTab == "reviews" ? "active" : "")"
+                        @onclick='() => activeTab = "reviews"'>
+                    ⭐ @Lang.T("my_reviews")
+                </button>
+            </li>
+        </ul>
+
+        <!-- MY LISTINGS TAB -->
+        @if (activeTab == "listings")
+        {
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="fw-bold mb-0">@Lang.T("my_listings")</h5>
+                <a href="/listings/create" class="btn btn-sm btn-success">
+                    ➕ Add Listing
+                </a>
+            </div>
+
+            @if (!summary.MyListings.Any())
+            {
+                <div class="alert alert-info text-center">
+                    <span class="fs-3">📚</span>
+                    <p class="mb-0 mt-2">You have not posted any listings yet.</p>
+                </div>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Title</th>
+                                <th>Price</th>
+                                <th>Condition</th>
+                                <th>Campus</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var l in summary.MyListings)
+                            {
+                                <tr>
+                                    <td>
+                                        <a href="/listings/@l.ListingId"
+                                               class="text-decoration-none fw-semibold">
+                                            @l.Textbook?.Title
+                                        </a>
+                                        <br />
+                                        <small class="text-muted">
+                                            @l.Textbook?.Author
+                                        </small>
+                                    </td>
+                                    <td>
+                                        <span class="text-success fw-bold">
+                                            R @l.Price.ToString("N0")
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <span class="badge @ConditionBadge(l.Condition)">
+                                            @l.Condition
+                                        </span>
+                                    </td>
+                                    <td>@l.CampusLocation</td>
+                                    <td>
+                                        <span class="badge @StatusBadge(l.Status)">
+                                            @l.Status
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <a href="/listings/edit/@l.ListingId"
+                                               class="btn btn-sm btn-outline-secondary">
+                                            ✏️ Edit
+                                        </a>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        }
+
+        <!-- MY OFFERS TAB -->
+        @if (activeTab == "offers")
+        {
+            <h5 class="fw-bold mb-3">@Lang.T("my_offers")</h5>
+
+            @if (!summary.MyOffers.Any())
+            {
+                <div class="alert alert-info text-center">
+                    <span class="fs-3">🤝</span>
+                    <p class="mb-0 mt-2">No offers yet.</p>
+                </div>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Listing</th>
+                                <th>Offer Price</th>
+                                <th>Your Role</th>
+                                <th>Status</th>
+                                <th>Date</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var o in summary.MyOffers)
+                            {
+                                <tr>
+                                    <td>
+                                        <a href="/listings/@o.ListingId"
+                                               class="text-decoration-none">
+                                            @o.Listing?.Textbook?.Title
+                                        </a>
+                                    </td>
+                                    <td>
+                                        <span class="text-success fw-bold">
+                                            R @o.ProposedPrice.ToString("N0")
+                                        </span>
+                                    </td>
+                                    <td>
+                                        @if (o.BuyerId == currentUserId)
+                                        {
+                                            <span class="badge bg-info">Buyer</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-warning text-dark">
+                                                Seller
+                                            </span>
+                                        }
+                                    </td>
+                                    <td>
+                                        <span class="badge @OfferStatusBadge(o.Status)">
+                                            @o.Status
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <small>@o.DateCreated.ToString("dd MMM")</small>
+                                    </td>
+                                    <td>
+                                        @if (o.Listing?.UserId == currentUserId
+                                                                                     && o.Status == "Pending")
+                                        {
+                                            <button class="btn btn-sm btn-success me-1"
+                                                    @onclick="() => AcceptOffer(o.OfferId)">
+                                                ✅ Accept
+                                            </button>
+                                            <button class="btn btn-sm btn-outline-danger"
+                                                    @onclick="() => RejectOffer(o.OfferId)">
+                                                ❌ Reject
+                                            </button>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        }
+
+        <!-- MY TRANSACTIONS TAB -->
+        @if (activeTab == "transactions")
+        {
+            <h5 class="fw-bold mb-3">@Lang.T("my_transactions")</h5>
+
+            @if (!summary.MyTransactions.Any())
+            {
+                <div class="alert alert-info text-center">
+                    <span class="fs-3">💳</span>
+                    <p class="mb-0 mt-2">No transactions yet.</p>
+                </div>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Book</th>
+                                <th>Price</th>
+                                <th>Payment</th>
+                                <th>Status</th>
+                                <th>Date</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var t in summary.MyTransactions)
+                            {
+                                <tr>
+                                    <td>
+                                        @t.Offer?.Listing?.Textbook?.Title
+                                    </td>
+                                    <td>
+                                        <span class="text-success fw-bold">
+                                            R @t.Offer?.ProposedPrice.ToString("N0")
+                                        </span>
+                                    </td>
+                                    <td>
+                                        @if (t.PaymentMethod == "CashOnMeetup")
+                                        {
+                                            <span>💵 Cash on Meetup</span>
+                                        }
+                                        else
+                                        {
+                                            <span>@t.PaymentMethod</span>
+                                        }
+                                    </td>
+                                    <td>
+                                        <span class="badge @(t.Status == "Completed"
+                                                                                                                                      ? "bg-success" : "bg-warning text-dark")">
+                                            @t.Status
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <small>
+                                            @t.TransactionDate.ToString("dd MMM yyyy")
+                                        </small>
+                                    </td>
+                                    <td>
+                                        @if (t.Status == "Pending")
+                                        {
+                                            <button class="btn btn-sm btn-success me-1"
+                                                    @onclick="() => MarkComplete(t.TransactionId)">
+                                                ✅ Mark Complete
+                                            </button>
+                                        }
+                                        @if (t.Status == "Completed")
+                                        {
+                                            <a href="/reviews/create/@t.TransactionId"
+                                                   class="btn btn-sm btn-outline-warning">
+                                                ⭐ Leave Review
+                                            </a>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        }
+
+        <!-- MY REVIEWS TAB -->
+        @if (activeTab == "reviews")
+        {
+            <h5 class="fw-bold mb-3">@Lang.T("my_reviews")</h5>
+
+            @if (!summary.MyReviews.Any())
+            {
+                <div class="alert alert-info text-center">
+                    <span class="fs-3">⭐</span>
+                    <p class="mb-0 mt-2">No reviews yet.</p>
+                </div>
+            }
+            else
+            {
+                @foreach (var r in summary.MyReviews)
+                {
+                    <div class="card mb-3 shadow-sm">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div>
+                                    <strong>
+                                        @r.Transaction?.Offer?.Listing?.Textbook?.Title
+                                    </strong>
+                                    <br />
+                                    <small class="text-muted">
+                                        @if (r.ReviewerId == currentUserId)
+                                        {
+                                            <span>You reviewed someone</span>
+                                        }
+                                        else
+                                        {
+                                            <span>Someone reviewed you</span>
+                                        }
+                                    </small>
+                                </div>
+                                <div class="text-warning fs-5">
+                                    @(new string('★', r.Rating))@(new string('☆', 5 - r.Rating))
+                                </div>
+                            </div>
+                            @if (!string.IsNullOrEmpty(r.Comment))
+                            {
+                                <p class="mt-2 mb-0 fst-italic text-muted">
+                                    "@r.Comment"
+                                </p>
+                            }
+                        </div>
+                    </div>
+                }
+            }
+        }
+    }
+</div>
+
+@code {
+    private DashboardSummary? summary;
+    private string? currentUserId;
+    private string? userName;
+    private string activeTab = "listings";
+    private bool isLoading = true;
+    private string? actionMsg;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var auth = await AuthStateProvider.GetAuthenticationStateAsync();
+        currentUserId = auth.User.FindFirst(
+            System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        userName = auth.User.Identity?.Name;
+
+        if (currentUserId != null)
+            summary = await DashboardSvc.GetDashboardAsync(currentUserId);
+
+        isLoading = false;
+        Lang.OnLanguageChanged += async () => await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task AcceptOffer(int offerId)
+    {
+        var offer = await Db.Offers
+            .Include(o => o.Listing)
+            .FirstOrDefaultAsync(o => o.OfferId == offerId);
+
+        if (offer == null) return;
+
+        offer.Status = "Accepted";
+
+        if (offer.Listing != null)
+            offer.Listing.Status = "Sold";
+
+        var tx = new Transaction
+        {
+            OfferId = offerId,
+            BuyerId = offer.BuyerId,
+            SellerId = currentUserId!,
+            TransactionDate = DateTime.UtcNow,
+            PaymentMethod = "CashOnMeetup",
+            Status = "Pending"
+        };
+
+        Db.Transactions.Add(tx);
+        await Db.SaveChangesAsync();
+
+        actionMsg = "Offer accepted! A transaction has been created.";
+        summary = await DashboardSvc.GetDashboardAsync(currentUserId!);
+    }
+
+    private async Task RejectOffer(int offerId)
+    {
+        var offer = await Db.Offers
+            .FirstOrDefaultAsync(o => o.OfferId == offerId);
+
+        if (offer == null) return;
+
+        offer.Status = "Rejected";
+        await Db.SaveChangesAsync();
+
+        actionMsg = "Offer rejected.";
+        summary = await DashboardSvc.GetDashboardAsync(currentUserId!);
+    }
+
+    private async Task MarkComplete(int transactionId)
+    {
+        var tx = await Db.Transactions
+            .FirstOrDefaultAsync(t => t.TransactionId == transactionId);
+
+        if (tx == null) return;
+
+        tx.Status = "Completed";
+        await Db.SaveChangesAsync();
+
+        actionMsg = "Transaction marked as complete!";
+        summary = await DashboardSvc.GetDashboardAsync(currentUserId!);
+    }
+
+    private string ConditionBadge(string? c) => c switch
+    {
+        "New" => "bg-success",
+        "Good" => "bg-primary",
+        _ => "bg-warning text-dark"
+    };
+
+    private string StatusBadge(string? s) => s switch
+    {
+        "Active" => "bg-success",
+        "Sold" => "bg-secondary",
+        _ => "bg-warning text-dark"
+    };
+
+    private string OfferStatusBadge(string? s) => s switch
+    {
+        "Accepted" => "bg-success",
+        "Rejected" => "bg-danger",
+        "Pending" => "bg-warning text-dark",
+        _ => "bg-secondary"
+    };
+}

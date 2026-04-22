@@ -1,0 +1,229 @@
+﻿@page "/wanted/create"
+@page "/wanted/edit/{Id:int}"
+@using SomaAfrica.Models
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.EntityFrameworkCore
+@attribute [Authorize]
+@inject ApplicationDbContext Db
+@inject NavigationManager Nav
+@inject AuthenticationStateProvider AuthStateProvider
+@inject LanguageService Lang
+@rendermode InteractiveServer
+
+<PageTitle>@(Id == null ? "Post Wanted Ad" : "Edit Wanted Ad") - SomaShare</PageTitle>
+
+<div class="container py-4" style="max-width:640px;">
+
+    <h2 class="fw-bold mb-4">
+        @(Id == null ? "📢 Post a Wanted Ad" : "✏️ Edit Wanted Ad")
+    </h2>
+
+    <p class="text-muted mb-4">
+        Can't find the textbook you need? Post a wanted ad and let sellers
+        come to you!
+    </p>
+
+    @if (successMsg != null)
+    {
+        <div class="alert alert-success">✅ @successMsg</div>
+    }
+    @if (errorMsg != null)
+    {
+        <div class="alert alert-danger">❌ @errorMsg</div>
+    }
+
+    <EditForm Model="formModel" OnValidSubmit="HandleSubmit">
+        <DataAnnotationsValidator />
+        <ValidationSummary class="alert alert-warning" />
+
+        <div class="card shadow-sm mb-3">
+            <div class="card-header bg-warning fw-bold">
+                🔍 What are you looking for?
+            </div>
+            <div class="card-body">
+
+                <div class="mb-3">
+                    <label class="form-label">
+                        @Lang.T("title") <span class="text-danger">*</span>
+                    </label>
+                    <InputText class="form-control"
+                               @bind-Value="formModel.Title"
+                               placeholder="e.g. Introduction to Algorithms" />
+                    <ValidationMessage For="() => formModel.Title"
+                                       class="text-danger small" />
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">
+                        @Lang.T("author") <span class="text-danger">*</span>
+                    </label>
+                    <InputText class="form-control"
+                               @bind-Value="formModel.Author"
+                               placeholder="e.g. Thomas Cormen" />
+                    <ValidationMessage For="() => formModel.Author"
+                                       class="text-danger small" />
+                </div>
+
+                <div class="row g-2 mb-3">
+                    <div class="col-12 col-md-6">
+                        <label class="form-label">
+                            @Lang.T("subject") <span class="text-danger">*</span>
+                        </label>
+                        <InputText class="form-control"
+                                   @bind-Value="formModel.Subject"
+                                   placeholder="e.g. CS301" />
+                        <ValidationMessage For="() => formModel.Subject"
+                                           class="text-danger small" />
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <label class="form-label">@Lang.T("campus")</label>
+                        <InputText class="form-control"
+                                   @bind-Value="formModel.Campus"
+                                   placeholder="e.g. Howard College" />
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">
+                        Maximum Budget (R)
+                        <span class="text-muted small">(optional)</span>
+                    </label>
+                    <InputNumber class="form-control"
+                                 @bind-Value="formModel.MaxPrice"
+                                 min="0" />
+                    <div class="form-text">
+                        Leave as 0 if you have no specific budget limit
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- Cash on Meetup Reminder -->
+        <div class="alert alert-warning mb-3">
+            💵 <strong>@Lang.T("cash_on_meetup")</strong> —
+            <small>@Lang.T("meetup_safety")</small>
+        </div>
+
+        <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-warning fw-bold"
+                    disabled="@saving">
+                @(saving ? "Saving..." : (Id == null ? "Post Wanted Ad" : "Save Changes"))
+            </button>
+            <a href="/wanted" class="btn btn-outline-secondary">
+                @Lang.T("cancel")
+            </a>
+        </div>
+
+    </EditForm>
+</div>
+
+@code {
+    [Parameter] public int? Id { get; set; }
+
+    private WantedAdFormModel formModel = new();
+    private string? currentUserId;
+    private string? successMsg;
+    private string? errorMsg;
+    private bool saving;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var auth = await AuthStateProvider.GetAuthenticationStateAsync();
+        currentUserId = auth.User.FindFirst(
+            System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+
+        // If editing load existing data into form
+        if (Id.HasValue)
+        {
+            var ad = await Db.WantedAds
+                .FirstOrDefaultAsync(w => w.WantedAdId == Id.Value);
+
+            if (ad != null)
+            {
+                formModel.Title = ad.Title;
+                formModel.Author = ad.Author;
+                formModel.Subject = ad.Subject;
+                formModel.Campus = ad.Campus;
+                formModel.MaxPrice = ad.MaxPrice;
+            }
+        }
+    }
+
+    private async Task HandleSubmit()
+    {
+        saving = true;
+        errorMsg = null;
+
+        try
+        {
+            if (Id.HasValue)
+            {
+                // Edit existing wanted ad
+                var ad = await Db.WantedAds
+                    .FirstOrDefaultAsync(w => w.WantedAdId == Id.Value);
+
+                if (ad != null)
+                {
+                    ad.Title = formModel.Title;
+                    ad.Author = formModel.Author;
+                    ad.Subject = formModel.Subject;
+                    ad.Campus = formModel.Campus;
+                    ad.MaxPrice = formModel.MaxPrice;
+                    await Db.SaveChangesAsync();
+                    successMsg = "Wanted ad updated successfully!";
+                }
+            }
+            else
+            {
+                // Create new wanted ad
+                var ad = new WantedAd
+                {
+                    UserId = currentUserId!,
+                    Title = formModel.Title,
+                    Author = formModel.Author,
+                    Subject = formModel.Subject,
+                    Campus = formModel.Campus,
+                    MaxPrice = formModel.MaxPrice,
+                    DatePosted = DateTime.UtcNow,
+                    IsActive = true
+                };
+
+                Db.WantedAds.Add(ad);
+                await Db.SaveChangesAsync();
+                Nav.NavigateTo("/wanted");
+            }
+        }
+        catch (Exception)
+        {
+            errorMsg = "Failed to save. Please try again.";
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+
+    // Form model with validation
+    public class WantedAdFormModel
+    {
+        [System.ComponentModel.DataAnnotations.Required(
+            ErrorMessage = "Title is required")]
+        public string Title { get; set; } = "";
+
+        [System.ComponentModel.DataAnnotations.Required(
+            ErrorMessage = "Author is required")]
+        public string Author { get; set; } = "";
+
+        [System.ComponentModel.DataAnnotations.Required(
+            ErrorMessage = "Subject or course code is required")]
+        public string Subject { get; set; } = "";
+
+        public string Campus { get; set; } = "";
+
+        [System.ComponentModel.DataAnnotations.Range(
+            0, 99999, ErrorMessage = "Budget must be between R0 and R99,999")]
+        public decimal MaxPrice { get; set; }
+    }
+}

@@ -1,0 +1,137 @@
+﻿@implements IDisposable
+@inject NavigationManager NavigationManager
+@inject LanguageService Lang
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+
+<div class="top-row ps-3 navbar navbar-dark">
+    <div class="container-fluid">
+        <a class="navbar-brand fw-bold d-flex align-items-center gap-2" href="">
+            <img src="/images/SomaAfrica_WEBB262_SS1_Logo_No.png"
+                 alt="SomaAfrika Logo"
+                 style="height:36px; width:auto;" />
+            SomaAfrika
+        </a>
+    </div>
+</div>
+
+<input type="checkbox" title="Navigation menu" class="navbar-toggler" />
+
+<div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
+    <nav class="nav flex-column">
+
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
+                🏠 @Lang.T("home")
+            </NavLink>
+        </div>
+
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="listings">
+                📚 @Lang.T("listings")
+            </NavLink>
+        </div>
+
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="wanted">
+                🔍 @Lang.T("wanted_ads")
+            </NavLink>
+        </div>
+
+        <AuthorizeView>
+            <Authorized>
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="dashboard">
+                        📊 @Lang.T("dashboard")
+                    </NavLink>
+                </div>
+
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="listings/create">
+                        ➕ @Lang.T("add_listing")
+                    </NavLink>
+                </div>
+
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="wanted/create">
+                        📢 @Lang.T("post_wanted_ad")
+                    </NavLink>
+                </div>
+
+                <hr class="text-white mx-3" />
+
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="Account/Manage">
+                        👤 @context.User.Identity?.Name
+                    </NavLink>
+                </div>
+
+                <div class="nav-item px-3">
+                    <form action="Account/Logout" method="post">
+                        <AntiforgeryToken />
+                        <input type="hidden" name="ReturnUrl" value="@currentUrl" />
+                        <button type="submit" class="nav-link">
+                            🚪 @Lang.T("logout")
+                        </button>
+                    </form>
+                </div>
+            </Authorized>
+
+            <NotAuthorized>
+                <hr class="text-white mx-3" />
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="Account/Register">
+                        📝 @Lang.T("register")
+                    </NavLink>
+                </div>
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="Account/Login">
+                        🔑 @Lang.T("login")
+                    </NavLink>
+                </div>
+            </NotAuthorized>
+        </AuthorizeView>
+
+        <hr class="text-white mx-3" />
+
+        <!-- Language Toggle — Africanisation Section 6 -->
+        <div class="nav-item px-3 pb-3">
+            <button class="btn btn-outline-light btn-sm w-100" @onclick="ToggleLanguage">
+                🌍 @(Lang.IsZulu ? "Switch to English" : "Shintsha isiZulu")
+            </button>
+        </div>
+
+    </nav>
+</div>
+
+@code {
+    private string? currentUrl;
+
+    protected override void OnInitialized()
+    {
+        currentUrl = NavigationManager.ToBaseRelativePath(NavigationManager.Uri);
+        NavigationManager.LocationChanged += OnLocationChanged;
+        Lang.OnLanguageChanged += OnLangChanged;
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        currentUrl = NavigationManager.ToBaseRelativePath(e.Location);
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void OnLangChanged()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void ToggleLanguage()
+    {
+        Lang.Toggle();
+    }
+
+    public void Dispose()
+    {
+        NavigationManager.LocationChanged -= OnLocationChanged;
+        Lang.OnLanguageChanged -= OnLangChanged;
+    }
+}
