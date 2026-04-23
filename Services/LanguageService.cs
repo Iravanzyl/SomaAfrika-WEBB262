@@ -131,4 +131,4 @@
             ["meetup_safety"] = "Iseluleko sokuphepha: Hlangana endaweni yomphakathi ekhempasini.",
         };
     }
-}
+} 
