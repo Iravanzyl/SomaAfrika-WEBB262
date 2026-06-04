@@ -189,3 +189,15 @@
         }
     }
 } 
+<AuthorizeView>
+    <Authorized>
+        @if (context.User.IsInRole("Buyer"))
+        {
+            <p>You are a Buyer</p>
+        }
+        else
+        {
+            <p>You are NOT a Buyer</p>
+        }
+    </Authorized>
+</AuthorizeView>

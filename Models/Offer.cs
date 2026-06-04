@@ -19,4 +19,5 @@ public class Offer
     public string Status { get; set; } = "Pending";
 
     public DateTime DateCreated { get; set; } = DateTime.UtcNow;
+    public bool IsAccepted { get; internal set; }
 }

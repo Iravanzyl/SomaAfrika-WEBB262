@@ -1,11 +1,11 @@
 ﻿@page "/listings/create"
 @page "/listings/edit/{Id:int}"
+@attribute [Authorize(Policy = "NotForBuyers")]
 @using SomaAfrica.Models
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.Components.Authorization
-@using Microsoft.EntityFrameworkCore
-@attribute [Authorize]
-@inject ApplicationDbContext Db
+@using SomaAfrica.Data.Services
+@inject ListingService ListingService
 @inject NavigationManager Nav
 @inject AuthenticationStateProvider AuthStateProvider
 @inject LanguageService Lang
@@ -19,15 +19,31 @@
         @(Id == null ? "📖 Add New Listing" : "✏️ Edit Listing")
     </h2>
 
-    @if (successMsg != null)
-    {
-        <div class="alert alert-success">✅ @successMsg</div>
-    }
-    @if (errorMsg != null)
-    {
-        <div class="alert alert-danger">❌ @errorMsg</div>
-    }
+@if (errorMsg != null)
+{
+    <div class="alert alert-danger">
+        ❌ @errorMsg
+    </div>
+}
 
+@if (notAllowed)
+{
+    <a href="/listings" class="btn btn-outline-secondary">
+        ← Back to Listings
+    </a>
+}
+else if (successMsg != null)
+{
+    <div class="alert alert-success">
+        ✅ @successMsg
+        <br />
+        <a href="/listings" class="btn btn-success mt-2">
+            Back to Listings
+        </a>
+    </div>
+}
+else
+{
     <EditForm Model="formModel" OnValidSubmit="HandleSubmit">
         <DataAnnotationsValidator />
         <ValidationSummary class="alert alert-warning" />
@@ -157,6 +173,7 @@
         </div>
 
     </EditForm>
+    }
 </div>
 
 @code {
@@ -167,31 +184,37 @@
     private string? successMsg;
     private string? errorMsg;
     private bool saving;
+    private bool notAllowed;
 
     protected override async Task OnInitializedAsync()
     {
-        var auth = await AuthStateProvider.GetAuthenticationStateAsync();
-        currentUserId = auth.User.FindFirst(
-            System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        var auth = await AuthStateProvider
+            .GetAuthenticationStateAsync();
 
-        // If editing, load existing data into the form
+        currentUserId = auth.User.FindFirst(
+            System.Security.Claims.ClaimTypes
+            .NameIdentifier)?.Value;
+
+        // When editing, only allow the user who created the listing to load its details.
         if (Id.HasValue)
         {
-            var listing = await Db.Listings
-                .Include(l => l.Textbook)
-                .FirstOrDefaultAsync(l => l.ListingId == Id.Value);
+            var listing = await ListingService.GetListingAsync(Id.Value);
 
-            if (listing != null)
+            if (listing == null || listing.UserId != currentUserId)
             {
-                formModel.Title = listing.Textbook?.Title ?? "";
-                formModel.Author = listing.Textbook?.Author ?? "";
-                formModel.ISBN = listing.Textbook?.ISBN ?? "";
-                formModel.Subject = listing.Textbook?.Subject ?? "";
-                formModel.Price = listing.Price;
-                formModel.Condition = listing.Condition;
-                formModel.CampusLocation = listing.CampusLocation;
-                formModel.ImageUrl = listing.ImageUrl ?? "";
+                notAllowed = true;
+                errorMsg = "You are not authorised to edit this listing.";
+                return;
             }
+
+            formModel.Title = listing.Textbook?.Title ?? "";
+            formModel.Author = listing.Textbook?.Author ?? "";
+            formModel.ISBN = listing.Textbook?.ISBN ?? "";
+            formModel.Subject = listing.Textbook?.Subject ?? "";
+            formModel.Price = listing.Price;
+            formModel.Condition = listing.Condition;
+            formModel.CampusLocation = listing.CampusLocation;
+            formModel.ImageUrl = listing.ImageUrl ?? "";
         }
     }
 
@@ -202,31 +225,57 @@
 
         try
         {
-            if (Id.HasValue)
-            {
-                // Edit existing listing
-                var listing = await Db.Listings
-                    .Include(l => l.Textbook)
-                    .FirstOrDefaultAsync(l => l.ListingId == Id.Value);
-
-                if (listing?.Textbook != null)
+             if (Id.HasValue)
                 {
-                    listing.Textbook.Title = formModel.Title;
-                    listing.Textbook.Author = formModel.Author;
-                    listing.Textbook.ISBN = formModel.ISBN;
-                    listing.Textbook.Subject = formModel.Subject;
-                    listing.Price = formModel.Price;
-                    listing.Condition = formModel.Condition;
-                    listing.CampusLocation = formModel.CampusLocation;
-                    listing.ImageUrl = string.IsNullOrWhiteSpace(formModel.ImageUrl)
-                                               ? null : formModel.ImageUrl;
-                    await Db.SaveChangesAsync();
+                    var listing = await ListingService.GetListingAsync(Id.Value);
+
+                    // Recheck ownership during saving to prevent unauthorised URL-based edits.
+                    if (listing == null ||
+                        listing.UserId != currentUserId ||
+                        listing.Textbook == null)
+                    {
+                        notAllowed = true;
+                        errorMsg = "You are not authorised to edit this listing.";
+                        saving = false;
+                        return;
+                    }
+                    listing.Textbook.Title =
+                        formModel.Title;
+
+                    listing.Textbook.Author =
+                        formModel.Author;
+
+                    listing.Textbook.ISBN =
+                        formModel.ISBN;
+
+                    listing.Textbook.Subject =
+                        formModel.Subject;
+
+                    listing.Price =
+                        formModel.Price;
+
+                    listing.Condition =
+                        formModel.Condition;
+
+                    listing.CampusLocation =
+                        formModel.CampusLocation;
+
+                    listing.ImageUrl =
+                        string.IsNullOrWhiteSpace(
+                        formModel.ImageUrl)
+                        ? null
+                        : formModel.ImageUrl;
+
+                    // Save updates to the existing listing.
+                    await ListingService.UpdateListingAsync(listing);
+
                     successMsg = "Listing updated successfully!";
                 }
-            }
             else
             {
-                // Create new textbook first, then the listing
+                // Create textbook first,
+                // then create listing
+                // to maintain FK integrity
                 var textbook = new Textbook
                 {
                     Title = formModel.Title,
@@ -234,30 +283,41 @@
                     ISBN = formModel.ISBN,
                     Subject = formModel.Subject
                 };
-                Db.Textbooks.Add(textbook);
-                await Db.SaveChangesAsync();
 
                 var newListing = new Listing
                 {
                     UserId = currentUserId!,
-                    TextbookId = textbook.TextbookId,
                     Price = formModel.Price,
                     Condition = formModel.Condition,
-                    CampusLocation = formModel.CampusLocation,
-                    Status = "Active",
-                    ImageUrl = string.IsNullOrWhiteSpace(formModel.ImageUrl)
-                                     ? null : formModel.ImageUrl,
-                    DatePosted = DateTime.UtcNow
-                };
-                Db.Listings.Add(newListing);
-                await Db.SaveChangesAsync();
+                    CampusLocation =
+                        formModel.CampusLocation,
 
-                Nav.NavigateTo($"/listings/{newListing.ListingId}");
+                    Status = "Active",
+
+                    ImageUrl =
+                        string.IsNullOrWhiteSpace(
+                        formModel.ImageUrl)
+                        ? null
+                        : formModel.ImageUrl,
+
+                    DatePosted =
+                        DateTime.UtcNow
+                };
+
+                var listingId =
+                    await ListingService
+                    .CreateListingAsync(
+                    textbook,
+                    newListing);
+
+                Nav.NavigateTo(
+                    $"/listings/{listingId}");
             }
         }
         catch (Exception)
         {
-            errorMsg = "Failed to save listing. Please try again.";
+            errorMsg =
+                "Failed to save listing. Please try again.";
         }
         finally
         {
@@ -265,34 +325,52 @@
         }
     }
 
-    // Form model with validation rules
     public class ListingFormModel
     {
-        [System.ComponentModel.DataAnnotations.Required(
-            ErrorMessage = "Title is required")]
+        [System.ComponentModel
+        .DataAnnotations.Required(
+        ErrorMessage = "Title is required")]
+
         public string Title { get; set; } = "";
 
-        [System.ComponentModel.DataAnnotations.Required(
-            ErrorMessage = "Author is required")]
+        [System.ComponentModel
+        .DataAnnotations.Required(
+        ErrorMessage = "Author is required")]
+
         public string Author { get; set; } = "";
 
-        [System.ComponentModel.DataAnnotations.Required(
-            ErrorMessage = "ISBN is required")]
+        [System.ComponentModel
+        .DataAnnotations.Required(
+        ErrorMessage = "ISBN is required")]
+
         public string ISBN { get; set; } = "";
 
         public string Subject { get; set; } = "";
 
-        [System.ComponentModel.DataAnnotations.Required]
-        [System.ComponentModel.DataAnnotations.Range(
-            1, 99999, ErrorMessage = "Price must be between R1 and R99,999")]
+        [System.ComponentModel
+        .DataAnnotations.Required]
+
+        [System.ComponentModel
+        .DataAnnotations.Range(
+        1,
+        99999,
+        ErrorMessage =
+        "Price must be between R1 and R99,999")]
+
         public decimal Price { get; set; }
 
-        public string Condition { get; set; } = "Good";
+        public string Condition
+        { get; set; } = "Good";
 
-        [System.ComponentModel.DataAnnotations.Required(
-            ErrorMessage = "Campus location is required")]
-        public string CampusLocation { get; set; } = "";
+        [System.ComponentModel
+        .DataAnnotations.Required(
+        ErrorMessage =
+        "Campus location is required")]
 
-        public string? ImageUrl { get; set; }
+        public string CampusLocation
+        { get; set; } = "";
+
+        public string? ImageUrl
+        { get; set; }
     }
 }

@@ -4,17 +4,7 @@ using SomaAfrica.Models;
 
 namespace SomaAfrica.Services
 {
-    public class DashboardSummary
-    {
-        public List<Listing> MyListings { get; set; } = new();
-        public List<Offer> MyOffers { get; set; } = new();
-        public List<Transaction> MyTransactions { get; set; } = new();
-        public List<Review> MyReviews { get; set; } = new();
-        public double TrustScore { get; set; }
-        public int CompletedTransactions { get; set; }
-    }
-
-    public class DashboardService
+     public class DashboardService
     {
         private readonly ApplicationDbContext _db;
 
@@ -101,5 +91,47 @@ namespace SomaAfrica.Services
             score = Math.Min(5.0, score + completed * 0.02);
             return Math.Round(score, 1);
         }
+  
+    //Wishlist code
+// Get wishlist
+public async Task<List<WishlistItem>> GetWishlistAsync(string userId)
+        {
+            return await _db.WishlistItems
+                .Include(w => w.Listing)
+                    .ThenInclude(l => l.Textbook)
+                .Where(w => w.UserId == userId)
+                .ToListAsync();
+        }
+
+        // Add to wishlist
+        public async Task AddToWishlistAsync(string userId, int listingId)
+        {
+            var exists = await _db.WishlistItems
+                .AnyAsync(w => w.UserId == userId && w.ListingId == listingId);
+
+            if (exists) return;
+
+            _db.WishlistItems.Add(new WishlistItem
+            {
+                UserId = userId,
+                ListingId = listingId
+            });
+
+            await _db.SaveChangesAsync();
+        }
+
+        // Remove from wishlist
+        public async Task RemoveFromWishlistAsync(string userId, int listingId)
+        {
+            var item = await _db.WishlistItems
+                .FirstOrDefaultAsync(w => w.UserId == userId && w.ListingId == listingId);
+
+            if (item != null)
+            {
+                _db.WishlistItems.Remove(item);
+                await _db.SaveChangesAsync();
+            }
+        }
     }
-} 
+}
+    

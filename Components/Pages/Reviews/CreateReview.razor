@@ -25,6 +25,39 @@
             <div class="spinner-border text-success"></div>
         </div>
     }
+    else if (transaction == null)
+    {
+        <div class="alert alert-danger">
+            <strong>Transaction not found.</strong>
+            <p class="mb-0 mt-1">
+                <a href="/dashboard">Back to Dashboard</a>
+            </p>
+        </div>
+    }
+    else if (notAllowed)
+    {
+        <div class="alert alert-danger">
+            <strong>You are not authorised to review this transaction.</strong>
+            <p class="mb-0 mt-1">
+                Only the buyer or seller involved in the exchange may leave a review.
+            </p>
+            <p class="mb-0 mt-2">
+                <a href="/dashboard">Back to Dashboard</a>
+            </p>
+        </div>
+    }
+    else if (transactionNotCompleted)
+    {
+        <div class="alert alert-warning">
+            <strong>This transaction cannot be reviewed yet.</strong>
+            <p class="mb-0 mt-1">
+                Reviews are only available after the transaction has been completed.
+            </p>
+            <p class="mb-0 mt-2">
+                <a href="/dashboard">Back to Dashboard</a>
+            </p>
+        </div>
+    }
     else if (alreadyReviewed)
     {
         <div class="alert alert-info">
@@ -33,13 +66,6 @@
             <p class="mb-0 mt-1">
                 <a href="/dashboard">Back to Dashboard</a>
             </p>
-        </div>
-    }
-    else if (transaction == null)
-    {
-        <div class="alert alert-danger">
-            Transaction not found.
-            <a href="/dashboard">Back to Dashboard</a>
         </div>
     }
     else
@@ -160,6 +186,8 @@
     private string? errorMsg = null;
     private bool isLoading = true;
     private bool alreadyReviewed;
+    private bool notAllowed;
+    private bool transactionNotCompleted;
     private bool saving;
 
     private ReviewFormModel formModel = new();
@@ -167,6 +195,7 @@
     protected override async Task OnInitializedAsync()
     {
         var auth = await AuthStateProvider.GetAuthenticationStateAsync();
+
         currentUserId = auth.User.FindFirst(
             System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
 
@@ -176,15 +205,25 @@
                     .ThenInclude(l => l.Textbook)
             .FirstOrDefaultAsync(t => t.TransactionId == TransactionId);
 
-        if (transaction != null)
+        if (transaction == null)
         {
-            // Work out who is being reviewed
-            // If current user is buyer they review the seller and vice versa
+            isLoading = false;
+            return;
+        }
+
+        // A review may only be created by the buyer or seller involved in the transaction.
+        notAllowed = currentUserId != transaction.BuyerId
+            && currentUserId != transaction.SellerId;
+
+        // Reviews should only be submitted once the physical exchange is completed.
+        transactionNotCompleted = transaction.Status != "Completed";
+
+        if (!notAllowed && !transactionNotCompleted)
+        {
             reviewedUserId = transaction.BuyerId == currentUserId
                 ? transaction.SellerId
                 : transaction.BuyerId;
 
-            // Check if this user already left a review for this transaction
             alreadyReviewed = await Db.Reviews.AnyAsync(r =>
                 r.TransactionId == TransactionId &&
                 r.ReviewerId == currentUserId);

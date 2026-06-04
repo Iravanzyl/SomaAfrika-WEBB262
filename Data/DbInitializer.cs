@@ -66,8 +66,11 @@ namespace SomaAfrica.Data
                     LanguagePreference = "en"
                 };
                 await userManager.CreateAsync(buyer, "Buyer@123");
-                await userManager.AddToRoleAsync(buyer, "Buyer");
             }
+            if (!await userManager.IsInRoleAsync(buyer, "Buyer"))
+{
+    await userManager.AddToRoleAsync(buyer, "Buyer");
+}
 
             // ── Seed Textbooks & Listings ─────────────────────────────
             if (!db.Listings.Any())

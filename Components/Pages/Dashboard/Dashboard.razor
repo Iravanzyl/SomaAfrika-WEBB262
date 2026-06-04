@@ -353,16 +353,21 @@
                                     <td>
                                         @if (t.Status == "Pending")
                                         {
-                                            <button class="btn btn-sm btn-success me-1"
+                                            <button class="btn btn-sm btn-success"
                                                     @onclick="() => MarkComplete(t.TransactionId)">
                                                 ✅ Mark Complete
                                             </button>
                                         }
-                                        @if (t.Status == "Completed")
+                                        else if (t.Status == "Completed")
                                         {
                                             <a href="/reviews/create/@t.TransactionId"
-                                                   class="btn btn-sm btn-outline-warning">
+                                                   class="btn btn-sm btn-outline-warning me-1">
                                                 ⭐ Leave Review
+                                            </a>
+
+                                            <a href="/transactions/qr/@t.TransactionId"
+                                                   class="btn btn-sm btn-outline-success">
+                                                📱 QR Verify
                                             </a>
                                         }
                                     </td>

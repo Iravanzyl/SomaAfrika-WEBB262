@@ -19,6 +19,9 @@ namespace SomaAfrica.Data
         public DbSet<Review> Reviews { get; set; }
         public DbSet<WantedAd> WantedAds { get; set; }
 
+        //DBset
+        public DbSet<WishlistItem> WishlistItems { get; set; }
+
         protected override void OnModelCreating(ModelBuilder builder)
         {
             base.OnModelCreating(builder);
@@ -29,6 +32,8 @@ namespace SomaAfrica.Data
                 .WithMany()
                 .HasForeignKey(l => l.UserId)
                 .OnDelete(DeleteBehavior.Restrict);
+            
+
 
             // Listing → Textbook
             builder.Entity<Listing>()
@@ -43,6 +48,7 @@ namespace SomaAfrica.Data
                 .WithMany()
                 .HasForeignKey(o => o.ListingId)
                 .OnDelete(DeleteBehavior.Cascade);
+            
 
             // Offer → Buyer (User)
             builder.Entity<Offer>()
