@@ -1,0 +1,376 @@
+﻿@page "/listings/create"
+@page "/listings/edit/{Id:int}"
+@attribute [Authorize(Policy = "NotForBuyers")]
+@using SomaAfrica.Models
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using SomaAfrica.Data.Services
+@inject ListingService ListingService
+@inject NavigationManager Nav
+@inject AuthenticationStateProvider AuthStateProvider
+@inject LanguageService Lang
+@rendermode InteractiveServer
+
+<PageTitle>@(Id == null ? "Add Listing" : "Edit Listing") - SomaShare</PageTitle>
+
+<div class="container py-4" style="max-width:640px;">
+
+    <h2 class="fw-bold mb-4">
+        @(Id == null ? "📖 Add New Listing" : "✏️ Edit Listing")
+    </h2>
+
+@if (errorMsg != null)
+{
+    <div class="alert alert-danger">
+        ❌ @errorMsg
+    </div>
+}
+
+@if (notAllowed)
+{
+    <a href="/listings" class="btn btn-outline-secondary">
+        ← Back to Listings
+    </a>
+}
+else if (successMsg != null)
+{
+    <div class="alert alert-success">
+        ✅ @successMsg
+        <br />
+        <a href="/listings" class="btn btn-success mt-2">
+            Back to Listings
+        </a>
+    </div>
+}
+else
+{
+    <EditForm Model="formModel" OnValidSubmit="HandleSubmit">
+        <DataAnnotationsValidator />
+        <ValidationSummary class="alert alert-warning" />
+
+        <!-- Textbook Details -->
+        <div class="card shadow-sm mb-3">
+            <div class="card-header bg-success text-white fw-bold">
+                📚 Textbook Details
+            </div>
+            <div class="card-body">
+
+                <div class="mb-3">
+                    <label class="form-label">
+                        @Lang.T("title") <span class="text-danger">*</span>
+                    </label>
+                    <InputText class="form-control"
+                               @bind-Value="formModel.Title"
+                               placeholder="e.g. Introduction to Algorithms" />
+                    <ValidationMessage For="() => formModel.Title"
+                                       class="text-danger small" />
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">
+                        @Lang.T("author") <span class="text-danger">*</span>
+                    </label>
+                    <InputText class="form-control"
+                               @bind-Value="formModel.Author"
+                               placeholder="e.g. Thomas Cormen" />
+                    <ValidationMessage For="() => formModel.Author"
+                                       class="text-danger small" />
+                </div>
+
+                <div class="row g-2 mb-3">
+                    <div class="col-12 col-md-6">
+                        <label class="form-label">
+                            @Lang.T("isbn") <span class="text-danger">*</span>
+                        </label>
+                        <InputText class="form-control"
+                                   @bind-Value="formModel.ISBN"
+                                   placeholder="e.g. 978-3-16-148410-0" />
+                        <ValidationMessage For="() => formModel.ISBN"
+                                           class="text-danger small" />
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <label class="form-label">@Lang.T("subject")</label>
+                        <InputText class="form-control"
+                                   @bind-Value="formModel.Subject"
+                                   placeholder="e.g. CS301" />
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- Listing Details -->
+        <div class="card shadow-sm mb-3">
+            <div class="card-header bg-light fw-bold">
+                🏷️ Listing Details
+            </div>
+            <div class="card-body">
+
+                <div class="row g-2 mb-3">
+                    <div class="col-12 col-md-6">
+                        <label class="form-label">
+                            @Lang.T("price") (R) <span class="text-danger">*</span>
+                        </label>
+                        <InputNumber class="form-control"
+                                     @bind-Value="formModel.Price"
+                                     min="1" />
+                        <ValidationMessage For="() => formModel.Price"
+                                           class="text-danger small" />
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <label class="form-label">
+                            @Lang.T("condition") <span class="text-danger">*</span>
+                        </label>
+                        <InputSelect class="form-select"
+                                     @bind-Value="formModel.Condition">
+                            <option value="New">New</option>
+                            <option value="Good">Good</option>
+                            <option value="Fair">Fair</option>
+                        </InputSelect>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">
+                        @Lang.T("campus") <span class="text-danger">*</span>
+                    </label>
+                    <InputText class="form-control"
+                               @bind-Value="formModel.CampusLocation"
+                               placeholder="e.g. Howard College, Westville" />
+                    <ValidationMessage For="() => formModel.CampusLocation"
+                                       class="text-danger small" />
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">
+                        Image URL
+                        <span class="text-muted small">(optional)</span>
+                    </label>
+                    <InputText class="form-control"
+                               @bind-Value="formModel.ImageUrl"
+                               placeholder="https://..." />
+                    <div class="form-text">
+                        Paste a link to a photo of your textbook
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- Cash on Meetup Reminder -->
+        <div class="alert alert-warning mb-3">
+            💵 <strong>@Lang.T("cash_on_meetup")</strong> —
+            <small>@Lang.T("meetup_safety")</small>
+        </div>
+
+        <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-success" disabled="@saving">
+                @(saving ? "Saving..." : (Id == null ? "Post Listing" : "Save Changes"))
+            </button>
+            <a href="/listings" class="btn btn-outline-secondary">
+                @Lang.T("cancel")
+            </a>
+        </div>
+
+    </EditForm>
+    }
+</div>
+
+@code {
+    [Parameter] public int? Id { get; set; }
+
+    private ListingFormModel formModel = new();
+    private string? currentUserId;
+    private string? successMsg;
+    private string? errorMsg;
+    private bool saving;
+    private bool notAllowed;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var auth = await AuthStateProvider
+            .GetAuthenticationStateAsync();
+
+        currentUserId = auth.User.FindFirst(
+            System.Security.Claims.ClaimTypes
+            .NameIdentifier)?.Value;
+
+        // When editing, only allow the user who created the listing to load its details.
+        if (Id.HasValue)
+        {
+            var listing = await ListingService.GetListingAsync(Id.Value);
+
+            if (listing == null || listing.UserId != currentUserId)
+            {
+                notAllowed = true;
+                errorMsg = "You are not authorised to edit this listing.";
+                return;
+            }
+
+            formModel.Title = listing.Textbook?.Title ?? "";
+            formModel.Author = listing.Textbook?.Author ?? "";
+            formModel.ISBN = listing.Textbook?.ISBN ?? "";
+            formModel.Subject = listing.Textbook?.Subject ?? "";
+            formModel.Price = listing.Price;
+            formModel.Condition = listing.Condition;
+            formModel.CampusLocation = listing.CampusLocation;
+            formModel.ImageUrl = listing.ImageUrl ?? "";
+        }
+    }
+
+    private async Task HandleSubmit()
+    {
+        saving = true;
+        errorMsg = null;
+
+        try
+        {
+             if (Id.HasValue)
+                {
+                    var listing = await ListingService.GetListingAsync(Id.Value);
+
+                    // Recheck ownership during saving to prevent unauthorised URL-based edits.
+                    if (listing == null ||
+                        listing.UserId != currentUserId ||
+                        listing.Textbook == null)
+                    {
+                        notAllowed = true;
+                        errorMsg = "You are not authorised to edit this listing.";
+                        saving = false;
+                        return;
+                    }
+                    listing.Textbook.Title =
+                        formModel.Title;
+
+                    listing.Textbook.Author =
+                        formModel.Author;
+
+                    listing.Textbook.ISBN =
+                        formModel.ISBN;
+
+                    listing.Textbook.Subject =
+                        formModel.Subject;
+
+                    listing.Price =
+                        formModel.Price;
+
+                    listing.Condition =
+                        formModel.Condition;
+
+                    listing.CampusLocation =
+                        formModel.CampusLocation;
+
+                    listing.ImageUrl =
+                        string.IsNullOrWhiteSpace(
+                        formModel.ImageUrl)
+                        ? null
+                        : formModel.ImageUrl;
+
+                    // Save updates to the existing listing.
+                    await ListingService.UpdateListingAsync(listing);
+
+                    successMsg = "Listing updated successfully!";
+                }
+            else
+            {
+                // Create textbook first,
+                // then create listing
+                // to maintain FK integrity
+                var textbook = new Textbook
+                {
+                    Title = formModel.Title,
+                    Author = formModel.Author,
+                    ISBN = formModel.ISBN,
+                    Subject = formModel.Subject
+                };
+
+                var newListing = new Listing
+                {
+                    UserId = currentUserId!,
+                    Price = formModel.Price,
+                    Condition = formModel.Condition,
+                    CampusLocation =
+                        formModel.CampusLocation,
+
+                    Status = "Active",
+
+                    ImageUrl =
+                        string.IsNullOrWhiteSpace(
+                        formModel.ImageUrl)
+                        ? null
+                        : formModel.ImageUrl,
+
+                    DatePosted =
+                        DateTime.UtcNow
+                };
+
+                var listingId =
+                    await ListingService
+                    .CreateListingAsync(
+                    textbook,
+                    newListing);
+
+                Nav.NavigateTo(
+                    $"/listings/{listingId}");
+            }
+        }
+        catch (Exception)
+        {
+            errorMsg =
+                "Failed to save listing. Please try again.";
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+
+    public class ListingFormModel
+    {
+        [System.ComponentModel
+        .DataAnnotations.Required(
+        ErrorMessage = "Title is required")]
+
+        public string Title { get; set; } = "";
+
+        [System.ComponentModel
+        .DataAnnotations.Required(
+        ErrorMessage = "Author is required")]
+
+        public string Author { get; set; } = "";
+
+        [System.ComponentModel
+        .DataAnnotations.Required(
+        ErrorMessage = "ISBN is required")]
+
+        public string ISBN { get; set; } = "";
+
+        public string Subject { get; set; } = "";
+
+        [System.ComponentModel
+        .DataAnnotations.Required]
+
+        [System.ComponentModel
+        .DataAnnotations.Range(
+        1,
+        99999,
+        ErrorMessage =
+        "Price must be between R1 and R99,999")]
+
+        public decimal Price { get; set; }
+
+        public string Condition
+        { get; set; } = "Good";
+
+        [System.ComponentModel
+        .DataAnnotations.Required(
+        ErrorMessage =
+        "Campus location is required")]
+
+        public string CampusLocation
+        { get; set; } = "";
+
+        public string? ImageUrl
+        { get; set; }
+    }
+}

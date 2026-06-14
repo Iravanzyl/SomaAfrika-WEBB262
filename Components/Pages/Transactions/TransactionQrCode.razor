@@ -1,0 +1,152 @@
+﻿@page "/transactions/qr/{TransactionId:int}"
+@using SomaAfrica.Data
+@using SomaAfrica.Models
+@using SomaAfrica.Services
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.EntityFrameworkCore
+@attribute [Authorize]
+@inject ApplicationDbContext Db
+@inject AuthenticationStateProvider AuthStateProvider
+@inject NavigationManager Nav
+@inject QrCodeService QrService
+@rendermode InteractiveServer
+
+<PageTitle>Transaction QR Verification - SomaAfrika</PageTitle>
+
+<div class="container py-4" style="max-width: 700px;">
+
+    <a href="/dashboard" class="btn btn-outline-secondary btn-sm mb-3">
+        ← Back to Dashboard
+    </a>
+
+    <h2 class="fw-bold mb-3">📱 Transaction QR Verification</h2>
+
+    @if (isLoading)
+    {
+        <div class="text-center py-5">
+            <div class="spinner-border text-success"></div>
+            <p class="mt-2 text-muted">Loading transaction QR code...</p>
+        </div>
+    }
+    else if (transaction == null)
+    {
+        <div class="alert alert-danger">
+            This transaction could not be found.
+        </div>
+    }
+    else if (notAllowed)
+    {
+        <div class="alert alert-danger">
+            You are not authorised to view this transaction QR code.
+        </div>
+    }
+    else if (transaction.Status != "Completed")
+    {
+        <div class="alert alert-warning">
+            A QR verification code is only available after the transaction has been completed.
+        </div>
+    }
+    else
+    {
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-success text-white fw-bold">
+                ✅ Completed Transaction
+            </div>
+
+            <div class="card-body">
+                <p class="mb-2">
+                    <strong>Book:</strong>
+                    @transaction.Offer?.Listing?.Textbook?.Title
+                </p>
+
+                <p class="mb-2">
+                    <strong>Amount:</strong>
+                    R @transaction.Offer?.ProposedPrice.ToString("N0")
+                </p>
+
+                <p class="mb-2">
+                    <strong>Status:</strong>
+                    <span class="badge bg-success">@transaction.Status</span>
+                </p>
+
+                <p class="mb-0">
+                    <strong>Verification Reference:</strong>
+                    SA-TXN-@transaction.TransactionId.ToString("D6")
+                </p>
+            </div>
+        </div>
+
+        <div class="card shadow-sm text-center">
+            <div class="card-body">
+                <h5 class="fw-bold mb-3">Scan to Verify Exchange</h5>
+
+                @if (qrCodeDataUrl != null)
+                {
+                    <img src="@qrCodeDataUrl"
+                         alt="QR code for transaction verification"
+                         class="img-fluid border rounded p-2 mb-3"
+                         style="max-width: 280px;" />
+
+                    <p class="text-muted small mb-3">
+                        Scan this QR code to confirm that this is a valid completed SomaAfrika transaction.
+                    </p>
+
+                    <a href="@verificationUrl"
+                           target="_blank"
+                           class="btn btn-success">
+                        Open Verification Page
+                    </a>
+                }
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public int TransactionId { get; set; }
+
+    private Transaction? transaction;
+    private bool isLoading = true;
+    private bool notAllowed;
+    private string? qrCodeDataUrl;
+    private string? verificationUrl;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+
+        var currentUserId = authState.User.FindFirst(
+            System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+
+        transaction = await Db.Transactions
+            .Include(t => t.Offer)
+                .ThenInclude(o => o.Listing)
+                    .ThenInclude(l => l.Textbook)
+            .FirstOrDefaultAsync(t => t.TransactionId == TransactionId);
+
+        if (transaction == null)
+        {
+            isLoading = false;
+            return;
+        }
+
+        // Only the buyer or seller involved in the exchange may generate the QR code.
+        notAllowed = currentUserId != transaction.BuyerId
+            && currentUserId != transaction.SellerId;
+
+        if (!notAllowed && transaction.Status == "Completed")
+        {
+            verificationUrl =
+                $"{Nav.BaseUri.TrimEnd('/')}/verify-transaction/{transaction.TransactionId}";
+
+            byte[] qrCodeBytes = QrService.GenerateQrCode(verificationUrl);
+
+            qrCodeDataUrl =
+                $"data:image/png;base64,{Convert.ToBase64String(qrCodeBytes)}";
+        }
+
+        isLoading = false;
+    }
+}

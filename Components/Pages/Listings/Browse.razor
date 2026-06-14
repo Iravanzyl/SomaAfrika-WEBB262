@@ -1,0 +1,270 @@
+﻿@page "/listings"
+@using SomaAfrica.Models
+@inject SearchService SearchSvc
+@inject LanguageService Lang
+@rendermode InteractiveServer
+
+<PageTitle>@Lang.T("listings") - SomaShare</PageTitle>
+
+<div class="container-fluid px-3 px-md-4">
+
+    <!-- Page Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="fw-bold mb-0">
+            📚 @Lang.T("listings")
+        </h2>
+        <AuthorizeView>
+            <Authorized>
+                <a href="/listings/create" class="btn btn-success">
+                    ➕ @Lang.T("add_listing")
+                </a>
+            </Authorized>
+        </AuthorizeView>
+    </div>
+
+    <!-- Search Bar -->
+    <div class="card shadow-sm mb-3">
+        <div class="card-body py-3">
+            <div class="row g-2 align-items-end">
+                <div class="col-12 col-md-6">
+                    <input type="text"
+                           class="form-control form-control-lg"
+                           placeholder="@Lang.T("search_placeholder")"
+                           @bind="filter.Query"
+                           @bind:event="oninput"
+                           @onkeyup="OnSearchKeyUp" />
+                </div>
+                <div class="col-6 col-md-2">
+                    <label class="form-label small text-muted">@Lang.T("min_price")</label>
+                    <input type="number" class="form-control"
+                           placeholder="R0"
+                           @bind="filter.MinPrice" min="0" />
+                </div>
+                <div class="col-6 col-md-2">
+                    <label class="form-label small text-muted">@Lang.T("max_price")</label>
+                    <input type="number" class="form-control"
+                           placeholder="R9999"
+                           @bind="filter.MaxPrice" min="0" />
+                </div>
+                <div class="col-12 col-md-2">
+                    <button class="btn btn-success w-100" @onclick="ApplySearch">
+                        🔍 @Lang.T("search")
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filters Row -->
+    <div class="row g-2 mb-4">
+        <div class="col-6 col-md-3">
+            <select class="form-select" @bind="filter.Condition">
+                <option value="">@Lang.T("all_conditions")</option>
+                <option value="New">@Lang.T("new")</option>
+                <option value="Good">@Lang.T("good")</option>
+                <option value="Fair">@Lang.T("fair")</option>
+            </select>
+        </div>
+        <div class="col-6 col-md-3">
+            <select class="form-select" @bind="filter.Campus">
+                <option value="">@Lang.T("all_campuses")</option>
+                @foreach (var campus in campuses)
+                {
+                    <option value="@campus">@campus</option>
+                }
+            </select>
+        </div>
+        <div class="col-6 col-md-3">
+            <select class="form-select" @bind="filter.SortBy">
+                <option value="date">@Lang.T("sort_date")</option>
+                <option value="price_asc">@Lang.T("sort_price_asc")</option>
+                <option value="price_desc">@Lang.T("sort_price_desc")</option>
+            </select>
+        </div>
+        <div class="col-6 col-md-3">
+            <button class="btn btn-outline-secondary w-100" @onclick="ApplySearch">
+                🔽 @Lang.T("filter")
+            </button>
+        </div>
+    </div>
+
+    <!-- Results -->
+    @if (isLoading)
+    {
+        <div class="text-center py-5">
+            <div class="spinner-border text-success" role="status"></div>
+            <p class="mt-2 text-muted">Loading listings...</p>
+        </div>
+    }
+    else if (result == null || result.TotalCount == 0)
+    {
+        <div class="alert alert-info text-center">
+            <span class="fs-3">📭</span>
+            <p class="mb-0 mt-2">@Lang.T("no_listings")</p>
+        </div>
+    }
+    else
+    {
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <small class="text-muted">
+                Showing @result.Items.Count of @result.TotalCount listings
+            </small>
+        </div>
+
+        <!-- Listings Grid -->
+        <div class="row row-cols-1 row-cols-sm-2 row-cols-xl-3 g-3 mb-4">
+            @foreach (var listing in result.Items)
+            {
+                <div class="col">
+                    <div class="card h-100 shadow-sm listing-card">
+                        <!-- Book Image or Placeholder -->
+                        <div class="position-relative">
+                            @if (!string.IsNullOrEmpty(listing.ImageUrl))
+                            {
+                                <img src="@listing.ImageUrl"
+                                     class="card-img-top listing-img"
+                                     alt="Textbook cover" />
+                            }
+                            else
+                            {
+                                <div class="listing-img-placeholder d-flex align-items-center justify-content-center bg-light">
+                                    <span class="fs-1">📖</span>
+                                </div>
+                            }
+                            <span class="badge @ConditionBadge(listing.Condition) position-absolute top-0 end-0 m-2">
+                                @listing.Condition
+                            </span>
+                        </div>
+
+                        <div class="card-body d-flex flex-column">
+                            <h6 class="card-title fw-bold mb-1 text-truncate"
+                                title="@listing.Textbook?.Title">
+                                @listing.Textbook?.Title
+                            </h6>
+                            <small class="text-muted mb-1">
+                                @listing.Textbook?.Author
+                            </small>
+                            <small class="text-muted mb-2">
+                                <span class="badge bg-secondary">
+                                    @listing.Textbook?.Subject
+                                </span>
+                                <span class="ms-1">📍 @listing.CampusLocation</span>
+                            </small>
+                            <div class="mt-auto">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span class="fs-5 fw-bold text-success">
+                                        R @listing.Price.ToString("N0")
+                                    </span>
+                                    <a href="/listings/@listing.ListingId"
+                                       class="btn btn-sm btn-outline-success">
+                                        @Lang.T("view_listing") →
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+
+        <!-- Pagination -->
+        @if (result.TotalPages > 1)
+        {
+            <nav aria-label="Listings pagination">
+                <ul class="pagination justify-content-center flex-wrap">
+                    <li class="page-item @(!result.HasPrev ? "disabled" : "")">
+                        <button class="page-link"
+                                @onclick="() => GoToPage(filter.Page - 1)">
+                            ← @Lang.T("prev")
+                        </button>
+                    </li>
+                    @for (int p = 1; p <= result.TotalPages; p++)
+                    {
+                        var pageNum = p;
+                        <li class="page-item @(filter.Page == pageNum ? "active" : "")">
+                            <button class="page-link"
+                                    @onclick="() => GoToPage(pageNum)">
+                                @pageNum
+                            </button>
+                        </li>
+                    }
+                    <li class="page-item @(!result.HasNext ? "disabled" : "")">
+                        <button class="page-link"
+                                @onclick="() => GoToPage(filter.Page + 1)">
+                            @Lang.T("next") →
+                        </button>
+                    </li>
+                </ul>
+                <p class="text-center text-muted small">
+                    @Lang.T("page") @result.Page @Lang.T("of") @result.TotalPages
+                </p>
+            </nav>
+        }
+    }
+</div>
+
+<style>
+    .listing-card {
+        transition: transform .15s, box-shadow .15s;
+        border-radius: 12px;
+        overflow: hidden;
+    }
+    .listing-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 6px 20px rgba(0,0,0,.12) !important;
+    }
+    .listing-img {
+        height: 160px;
+        object-fit: cover;
+        width: 100%;
+    }
+    .listing-img-placeholder {
+        height: 160px;
+    }
+</style>
+
+@code {
+    private SearchFilter filter = new();
+    private PagedResult<Listing>? result;
+    private List<string> campuses = new();
+    private bool isLoading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        campuses = await SearchSvc.GetCampusesAsync();
+        await LoadResults();
+        Lang.OnLanguageChanged += async () => await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task LoadResults()
+    {
+        isLoading = true;
+        StateHasChanged();
+        result = await SearchSvc.SearchListingsAsync(filter);
+        isLoading = false;
+    }
+
+    private async Task ApplySearch()
+    {
+        filter.Page = 1;
+        await LoadResults();
+    }
+
+    private async Task GoToPage(int page)
+    {
+        filter.Page = page;
+        await LoadResults();
+    }
+
+    private async Task OnSearchKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await ApplySearch();
+    }
+
+    private string ConditionBadge(string? condition) => condition switch
+    {
+        "New"  => "bg-success",
+        "Good" => "bg-primary",
+        _      => "bg-warning text-dark"
+    };
+} 

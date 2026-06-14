@@ -1,0 +1,302 @@
+﻿@page "/listings/{Id:int}"
+@using SomaAfrica.Models
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.EntityFrameworkCore
+@inject ApplicationDbContext Db
+@inject DashboardService DashboardSvc
+@inject LanguageService Lang
+@inject NavigationManager Nav
+@inject AuthenticationStateProvider AuthStateProvider
+@rendermode InteractiveServer
+
+<PageTitle>@(listing?.Textbook?.Title ?? "Listing") - SomaShare</PageTitle>
+
+@if (listing == null)
+{
+    <div class="text-center py-5">
+        <div class="spinner-border text-success"></div>
+    </div>
+}
+else
+{
+    <div class="container py-4" style="max-width:860px;">
+
+        <!-- Breadcrumb -->
+        <nav aria-label="breadcrumb" class="mb-3">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item">
+                    <a href="/listings">@Lang.T("listings")</a>
+                </li>
+                <li class="breadcrumb-item active">@listing.Textbook?.Title</li>
+            </ol>
+        </nav>
+
+        <div class="row g-4">
+
+            <!-- Book Image -->
+            <div class="col-12 col-md-4">
+                @if (!string.IsNullOrEmpty(listing.ImageUrl))
+                {
+                    <img src="@listing.ImageUrl"
+                         class="img-fluid rounded shadow"
+                         alt="Textbook cover" />
+                }
+                else
+                {
+                    <div class="bg-light rounded d-flex align-items-center justify-content-center"
+                         style="height:260px;">
+                        <span class="display-1">📖</span>
+                    </div>
+                }
+            </div>
+
+            <!-- Book Details -->
+            <div class="col-12 col-md-8">
+                <span class="badge @ConditionBadge(listing.Condition) mb-2">
+                    @listing.Condition
+                </span>
+                <h2 class="fw-bold">@listing.Textbook?.Title</h2>
+                <p class="text-muted mb-1">
+                    by <strong>@listing.Textbook?.Author</strong>
+                </p>
+                <p class="text-muted mb-2">
+                    ISBN: @listing.Textbook?.ISBN &nbsp;|&nbsp;
+                    Subject: <span class="badge bg-secondary">@listing.Textbook?.Subject</span>
+                </p>
+                <p class="mb-1">📍 <strong>@listing.CampusLocation</strong></p>
+                <p class="text-muted small mb-3">
+                    Posted: @listing.DatePosted.ToString("dd MMM yyyy")
+                </p>
+
+                <div class="d-flex align-items-center gap-3 mb-3">
+                    <span class="display-6 fw-bold text-success">
+                        R @listing.Price.ToString("N0")
+                    </span>
+                    @if (listing.Status != "Active")
+                    {
+                        <span class="badge bg-secondary fs-6">@listing.Status</span>
+                    }
+                </div>
+
+                <!-- Seller Trust Score -->
+                @if (sellerTrust > 0)
+                {
+                    <div class="alert alert-success py-2 mb-3 d-inline-block">
+                        ⭐ @Lang.T("trust_score"):
+                        <strong>@sellerTrust.ToString("N1") / 5.0</strong>
+                    </div>
+                }
+
+                <!-- Cash on Meetup Badge -->
+                <div class="alert alert-warning py-2 mb-3">
+                    💵 <strong>@Lang.T("cash_on_meetup")</strong>
+                    &nbsp;—&nbsp;
+                    <small>@Lang.T("meetup_safety")</small>
+                </div>
+
+                <!-- Success / Error Messages -->
+                @if (successMsg != null)
+                {
+                    <div class="alert alert-success alert-dismissible">
+                        @successMsg
+                        <button type="button" class="btn-close"
+                                @onclick="() => successMsg = null"></button>
+                    </div>
+                }
+                @if (errorMsg != null)
+                {
+                    <div class="alert alert-danger alert-dismissible">
+                        @errorMsg
+                        <button type="button" class="btn-close"
+                                @onclick="() => errorMsg = null"></button>
+                    </div>
+                }
+
+                <!-- Offer Form or Edit Buttons -->
+                <AuthorizeView>
+                    <Authorized>
+                        @if (listing.Status == "Active" && listing.UserId != currentUserId)
+                        {
+                            <div class="card border-success mb-3">
+                                <div class="card-header bg-success text-white fw-bold">
+                                    🤝 @Lang.T("make_offer")
+                                </div>
+                                <div class="card-body">
+                                    <div class="mb-3">
+                                        <label class="form-label">
+                                            Your Offer (R)
+                                        </label>
+                                        <input type="number"
+                                               class="form-control"
+                                               @bind="offerAmount"
+                                               min="1" max="99999" />
+                                        @if (offerError != null)
+                                        {
+                                            <div class="text-danger small mt-1">
+                                                @offerError
+                                            </div>
+                                        }
+                                    </div>
+                                    <button class="btn btn-success"
+                                            @onclick="SubmitOffer"
+                                            disabled="@submitting">
+                                        @(submitting ? "Submitting..." : "Submit Offer")
+                                    </button>
+                                </div>
+                            </div>
+                        }
+                        else if (listing.UserId == currentUserId)
+                        {
+                            <div class="d-flex gap-2">
+                                <a href="/listings/edit/@listing.ListingId"
+                                       class="btn btn-outline-secondary">
+                                    ✏️ Edit
+                                </a>
+                                <button class="btn btn-outline-danger"
+                                        @onclick="() => showDeleteConfirm = true">
+                                    🗑️ Delete
+                                </button>
+                            </div>
+                        }
+                    </Authorized>
+                    <NotAuthorized>
+                        <a href="/Account/Login" class="btn btn-success">
+                            🔑 Login to Make an Offer
+                        </a>
+                    </NotAuthorized>
+                </AuthorizeView>
+            </div>
+        </div>
+
+        <!-- Delete Confirmation Dialog -->
+        @if (showDeleteConfirm)
+        {
+            <div class="modal fade show d-block"
+                 style="background:rgba(0,0,0,.5);" tabindex="-1">
+                <div class="modal-dialog modal-dialog-centered">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">⚠️ Confirm Delete</h5>
+                        </div>
+                        <div class="modal-body">
+                            @Lang.T("delete_confirm")
+                        </div>
+                        <div class="modal-footer">
+                            <button class="btn btn-secondary"
+                                    @onclick="() => showDeleteConfirm = false">
+                                @Lang.T("cancel")
+                            </button>
+                            <button class="btn btn-danger"
+                                    @onclick="DeleteListing">
+                                @Lang.T("yes_delete")
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+
+    </div>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private Listing? listing;
+    private string? currentUserId;
+    private double sellerTrust;
+    private decimal offerAmount;
+    private string? offerError;
+    private string? successMsg;
+    private string? errorMsg;
+    private bool submitting;
+    private bool showDeleteConfirm;
+
+    protected override async Task OnInitializedAsync()
+    {
+        listing = await Db.Listings
+            .Include(l => l.Textbook)
+            .Include(l => l.User)
+            .FirstOrDefaultAsync(l => l.ListingId == Id);
+
+        if (listing != null)
+        {
+            offerAmount = listing.Price;
+            sellerTrust = await DashboardSvc.GetUserTrustScoreAsync(listing.UserId);
+        }
+
+        var auth = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = auth.User;
+        if (user.Identity?.IsAuthenticated == true)
+        {
+            currentUserId = user.FindFirst(
+                System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        }
+    }
+
+    private async Task SubmitOffer()
+    {
+        offerError = null;
+
+        if (offerAmount < 1)
+        {
+            offerError = "Please enter a valid offer amount.";
+            return;
+        }
+
+        submitting = true;
+        try
+        {
+            // Check if buyer already has a pending offer on this listing
+            var existing = await Db.Offers.AnyAsync(o =>
+                o.ListingId == Id &&
+                o.BuyerId == currentUserId &&
+                o.Status == "Pending");
+
+            if (existing)
+            {
+                errorMsg = "You already have a pending offer on this listing.";
+                return;
+            }
+
+            var offer = new Offer
+            {
+                ListingId = Id,
+                BuyerId = currentUserId!,
+                ProposedPrice = offerAmount,
+                Status = "Pending",
+                DateCreated = DateTime.UtcNow
+            };
+
+            Db.Offers.Add(offer);
+            await Db.SaveChangesAsync();
+            successMsg = $"Offer of R{offerAmount:N0} submitted! The seller will respond shortly.";
+        }
+        catch (Exception)
+        {
+            errorMsg = "Failed to submit offer. Please try again.";
+        }
+        finally
+        {
+            submitting = false;
+        }
+    }
+
+    private async Task DeleteListing()
+    {
+        showDeleteConfirm = false;
+        if (listing != null)
+        {
+            Db.Listings.Remove(listing);
+            await Db.SaveChangesAsync();
+            Nav.NavigateTo("/listings");
+        }
+    }
+
+    private string ConditionBadge(string? condition) => condition switch
+    {
+        "New" => "bg-success",
+        "Good" => "bg-primary",
+        _ => "bg-warning text-dark"
+    };
+}

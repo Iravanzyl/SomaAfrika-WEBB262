@@ -1,0 +1,106 @@
+﻿@page "/verify-transaction/{TransactionId:int}"
+@using SomaAfrica.Data
+@using SomaAfrica.Models
+@using Microsoft.EntityFrameworkCore
+@inject ApplicationDbContext Db
+
+<PageTitle>Verify Transaction - SomaAfrika</PageTitle>
+
+<div class="container py-5" style="max-width: 650px;">
+
+    <div class="text-center mb-4">
+        <h1 class="fw-bold">SomaAfrika</h1>
+        <p class="text-muted">Textbook Exchange Verification</p>
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="text-center py-5">
+            <div class="spinner-border text-success"></div>
+            <p class="mt-2 text-muted">Verifying transaction...</p>
+        </div>
+    }
+    else if (transaction == null)
+    {
+        <div class="alert alert-danger text-center shadow-sm">
+            <h4 class="fw-bold">❌ Transaction Not Verified</h4>
+            <p class="mb-0">
+                No valid SomaAfrika transaction was found for this QR code.
+            </p>
+        </div>
+    }
+    else if (transaction.Status != "Completed")
+    {
+        <div class="alert alert-warning text-center shadow-sm">
+            <h4 class="fw-bold">⚠️ Transaction Not Complete</h4>
+            <p class="mb-0">
+                This transaction exists, but it has not yet been completed.
+            </p>
+        </div>
+    }
+    else
+    {
+        <div class="alert alert-success text-center shadow-sm mb-4">
+            <h3 class="fw-bold">✅ Transaction Verified</h3>
+            <p class="mb-0">
+                This is a valid completed textbook exchange on SomaAfrika.
+            </p>
+        </div>
+
+        <div class="card shadow-sm">
+            <div class="card-header bg-success text-white fw-bold">
+                Verification Details
+            </div>
+
+            <div class="card-body">
+                <p class="mb-2">
+                    <strong>Reference:</strong>
+                    SA-TXN-@transaction.TransactionId.ToString("D6")
+                </p>
+
+                <p class="mb-2">
+                    <strong>Book:</strong>
+                    @transaction.Offer?.Listing?.Textbook?.Title
+                </p>
+
+                <p class="mb-2">
+                    <strong>Verified Amount:</strong>
+                    R @transaction.Offer?.ProposedPrice.ToString("N0")
+                </p>
+
+                <p class="mb-2">
+                    <strong>Transaction Date:</strong>
+                    @transaction.TransactionDate.ToString("dd MMMM yyyy")
+                </p>
+
+                <p class="mb-0">
+                    <strong>Status:</strong>
+                    <span class="badge bg-success">Completed</span>
+                </p>
+            </div>
+        </div>
+
+        <p class="text-muted small text-center mt-4">
+            Verification confirms that the transaction record exists and was completed on the SomaAfrika system.
+        </p>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public int TransactionId { get; set; }
+
+    private Transaction? transaction;
+    private bool isLoading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        transaction = await Db.Transactions
+            .Include(t => t.Offer)
+                .ThenInclude(o => o.Listing)
+                    .ThenInclude(l => l.Textbook)
+            .FirstOrDefaultAsync(t => t.TransactionId == TransactionId);
+
+        isLoading = false;
+    }
+}
